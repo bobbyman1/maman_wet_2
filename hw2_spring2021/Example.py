@@ -38,6 +38,14 @@ def createTable() -> None:
     try:
         conn = Connector.DBConnector()
         conn.execute("CREATE TABLE Users(id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+        conn.execute("CREATE TABLE Query\n" +
+                     "(\n" +
+                     "    id integer,\n" +
+                     "    purpose text NOT NULL ,\n" +
+                     "    disk_size_needed text NOT NULL ,\n" +
+                     "    PRIMARY KEY (id),\n" +
+                     "    CHECK (id > 0)\n" +
+                     ")")
         conn.commit()
     except DatabaseException.ConnectionInvalid as e:
         print(e)

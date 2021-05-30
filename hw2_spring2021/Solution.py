@@ -9,7 +9,37 @@ from psycopg2 import sql
 
 
 def createTables():
-    pass
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        conn.execute("CREATE TABLE Employee\n" +
+                      "(\n" +
+                      "    id integer,\n" +
+                      "    Name text NOT NULL ,\n" +
+                      "    City_of_Birth text NOT NULL ,\n" +
+                      "    PRIMARY KEY (id),\n" +
+                      "    CHECK (id > 0)\n" +
+                      ")")
+        except DatabaseException.ConnectionInvalid as e:
+        # do stuff
+        print(e)
+    except DatabaseException.NOT_NULL_VIOLATION as e:
+        # do stuff
+        print(e)
+    except DatabaseException.CHECK_VIOLATION as e:
+        # do stuff
+        print(e)
+    except DatabaseException.UNIQUE_VIOLATION as e:
+        # do stuff
+        print(e)
+    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
+        # do stuff
+        print(e)
+    except Exception as e:
+        print(e)
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
 
 
 def clearTables():
