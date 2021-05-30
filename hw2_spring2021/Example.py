@@ -10,8 +10,9 @@ def dropTable() -> None:
     conn = None
     try:
         conn = Connector.DBConnector()
-        conn.execute("DROP TABLE IF EXISTS Users,Query, Disk, Ram, QueryOnDisk, RamOnDisk CASCADE")
-        conn.execute("DROP VIEW IF EXISTS ViewDiskAndQuery, ViewDiskOnQuery CASCADE")
+        conn.execute("BEGIN; DROP TABLE IF EXISTS Users,Query, Disk, Ram, QueryOnDisk, RamOnDisk CASCADE;"
+                     " DROP VIEW IF EXISTS ViewDiskAndQuery, ViewDiskOnQuery CASCADE; COMMIT;")
+        #conn.execute("")
         conn.commit()
     except DatabaseException.ConnectionInvalid as e:
         # do stuff
@@ -40,7 +41,8 @@ def createTable() -> None:
     try:
         conn = Connector.DBConnector()
         conn.execute("CREATE TABLE Users(id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
-        conn.execute("CREATE TABLE Query\n" +
+        conn.execute("BEGIN;" +
+                    "CREATE TABLE Query\n" +
                      "(\n" +
                      "    id integer,\n" +
                      "    purpose text NOT NULL ,\n" +
@@ -48,9 +50,9 @@ def createTable() -> None:
                      "    PRIMARY KEY (id),\n" +
                      "    CHECK (id > 0),\n" +
                      "    CHECK (disk_size_needed >= 0)\n" +
-                     ")")
+                     ");" +
 
-        conn.execute("CREATE TABLE Disk\n" +
+                    "CREATE TABLE Disk\n" +
                      "(\n" +
                      "    id integer,\n" +
                      "    manufacturing_company text NOT NULL ,\n" +
@@ -62,9 +64,9 @@ def createTable() -> None:
                      "    CHECK (speed > 0),\n" +
                      "    CHECK (cost_per_byte > 0),\n" +
                      "    CHECK (free_space >= 0)\n" +
-                     ")")
+                     ");" +
 
-        conn.execute("CREATE TABLE Ram\n" +
+                    "CREATE TABLE Ram\n" +
                      "(\n" +
                      "    id integer,\n" +
                      "    size integer NOT NULL ,\n" +
@@ -72,36 +74,37 @@ def createTable() -> None:
                      "    PRIMARY KEY (id),\n" +
                      "    CHECK (id > 0),\n" +
                      "    CHECK (size > 0)\n" +
-                     ")")
+                     ");" +
         
-        conn.execute("CREATE TABLE QueryOnDisk\n" +
+                    "CREATE TABLE QueryOnDisk\n" +
                      "(\n" +
                      "    query_id integer,\n" +
                      "    disk_id integer,\n"
                      "    PRIMARY KEY (query_id, disk_id),\n" +
                      "    FOREIGN KEY (query_id) REFERENCES Query(id) ON DELETE CASCADE,\n" +
                      "    FOREIGN KEY (disk_id) REFERENCES Disk(id) ON DELETE CASCADE\n" +
-                     ")")
+                     ");" +
         
-        conn.execute("CREATE TABLE RamOnDisk\n" +
+                    "CREATE TABLE RamOnDisk\n" +
                      "(\n" +
                      "    ram_id integer,\n" +
                      "    disk_id integer,\n"
                      "    PRIMARY KEY (ram_id, disk_id),\n" +
                      "    FOREIGN KEY (ram_id) REFERENCES Ram(id) ON DELETE CASCADE,\n" +
                      "    FOREIGN KEY (disk_id) REFERENCES Disk(id) ON DELETE CASCADE\n" +
-                     ")")
+                     ");" +
         
-        conn.execute("CREATE VIEW ViewDiskAndQuery AS\n" +
+                    "CREATE VIEW ViewDiskAndQuery AS\n" +
                      "SELECT q.id AS query_id, q.disk_size_needed," +
                      "d.id AS disk_id, d.free_space" +
-                     " FROM Query q, Disk d\n" )
+                     " FROM Query q, Disk d\n;" +
 
-        conn.execute("CREATE VIEW ViewDiskOnQuery AS\n" +
+                    "CREATE VIEW ViewDiskOnQuery AS\n" +
                      "SELECT qod.query_id , qod.disk_id," +
                      "d.free_space, q.disk_size_needed" +
                      " FROM Query q, Disk d, QueryOnDisk as qod" +
-                     "\tWHERE d.id = qod.disk_id AND q.id = qod.disk_id;\n")
+                     "\tWHERE d.id = qod.disk_id AND q.id = qod.disk_id;\n" +
+                    "COMMIT;")
 
         conn.commit()
     except DatabaseException.ConnectionInvalid as e:
