@@ -3,9 +3,19 @@ from Utility.ReturnValue import ReturnValue
 from Utility.Exceptions import DatabaseException
 from Utility.DBConnector import ResultSet
 from Business.Query import Query
+from Business.RAM import RAM
+from Business.Disk import Disk
 from psycopg2 import sql
 
-
+def errorHandler(e):
+    ret_val = ReturnValue.ERROR
+    if isinstance(e,DatabaseException.NOT_NULL_VIOLATION):
+        ret_val = ReturnValue.BAD_PARAMS
+    elif isinstance(e,DatabaseException.CHECK_VIOLATION):
+        ret_val = ReturnValue.BAD_PARAMS
+    elif isinstance(e,DatabaseException.UNIQUE_VIOLATION):
+        ret_val = ReturnValue.ALREADY_EXISTS
+    return ret_val
 def dropTable() -> None:
     conn = None
     try:
@@ -95,13 +105,13 @@ def createTable() -> None:
                      ");" +
         
                     "CREATE VIEW ViewDiskAndQuery AS\n" +
-                     "SELECT q.id AS query_id, q.disk_size_needed," +
-                     "d.id AS disk_id, d.free_space" +
+                     "SELECT q.id AS query_id, q.disk_size_needed AS disk_size_needed," +
+                     "d.id AS disk_id, d.free_space AS free_space" +
                      " FROM Query q, Disk d\n;" +
 
                     "CREATE VIEW ViewDiskOnQuery AS\n" +
-                     "SELECT qod.query_id , qod.disk_id," +
-                     "d.free_space, q.disk_size_needed" +
+                     "SELECT qod.query_id AS query_id, qod.disk_id AS disk_id," +
+                     "d.free_space AS free_space, q.disk_size_needed AS disk_size_needed" +
                      " FROM Query q, Disk d, QueryOnDisk as qod" +
                      "\tWHERE d.id = qod.disk_id AND q.id = qod.disk_id;\n" +
                     "COMMIT;")
@@ -174,6 +184,7 @@ def addUser(ID: int, name: str) -> ReturnValue:
         return ReturnValue.OK
 def addQuery(query: Query) -> ReturnValue:
     conn = None
+    ret_val = ReturnValue.OK
     try:
         conn = Connector.DBConnector()
         id_param = query.getQueryID()
@@ -182,29 +193,337 @@ def addQuery(query: Query) -> ReturnValue:
         q = sql.SQL("INSERT INTO Query(id, purpose, disk_size_needed) VALUES({id}, {purpose}, {disk_size})").format(id=sql.Literal(id_param), purpose=sql.Literal(purpose_param), disk_size=sql.Literal(size_param))
         conn.execute(q)
         conn.commit()
-    except DatabaseException.ConnectionInvalid as e:
-        # do stuff
-        print(e)
-    except DatabaseException.NOT_NULL_VIOLATION as e:
-        # do stuff
-        print(e)
-    except DatabaseException.CHECK_VIOLATION as e:
-        # do stuff
-        print(e)
-    except DatabaseException.UNIQUE_VIOLATION as e:
-        # do stuff
-        print(e)
-    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
-        # do stuff
-        print(e)
     except Exception as e:
-        print(e)
+        ret_val = errorHandler(e)
+        conn.rollback()
     finally:
         # will happen any way after code try termination or exception handling
         conn.close()
+    return ret_val
+
+
+def getQueryProfile(queryID: int) -> Query:
+    conn = None
+    rows_affected = 0
+    result = ResultSet()
+
+    try:
+        conn = Connector.DBConnector()
+        rows_affected, result = conn.execute("SELECT * "
+                                             "FROM Query "
+                                             "WHERE id = {0}").format(queryID)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    if rows_affected == 0:
+        return BadQuery()
+    result.next()
+    return Query( result.getInt("id") , result.getString("purpose"), result.getInt("disk_size_needed"))
+
+
+def deleteQuery(query: Query) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        id_param = query.getQueryID()
+        size_param = query.getSize()
+        q = sql.SQL("BEGIN;"
+                    "UPDATE Disk SET free_space = free_space - {size}"
+                    "FROM QueryOnDisk As qod WHERE Disk.id = qod.disk_id AND qod.query_id = {se_ID};"
+                    "DELETE FROM Query WHERE id = {ID};"
+                    "COMMIT;").format(size=sql.Literal(size_param), se_ID=sql.Literal(id_param), ID=sql.Literal(id_param))
+        conn.execute(q)
+    except Exception as e:
+        ret_val = ReturnValue.ERROR
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
+
+def addDisk(disk: Disk) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        id_param = disk.getDiskID()
+        company_param = disk.getCompany()
+        speed_param = disk.getSpeed()
+        free_space_param = disk.getFreeSpace()
+        cost_param = disk.getCost()
+
+        q = sql.SQL("INSERT INTO Disk(id, manufacturing_company, speed, free_space, cost_per_byte) VALUES({id}, {company}, {speed}, {free_space}, {cost})").format(
+            id=sql.Literal(id_param), company=sql.Literal(company_param), speed=sql.Literal(speed_param),
+            free_space=sql.Literal(free_space_param), cost=sql.Literal(cost_param))
+        conn.execute(q)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
+
+
+def getDiskProfile(diskID: int) -> Disk:
+    conn = None
+    rows_affected = 0
+    result = ResultSet()
+
+    try:
+        conn = Connector.DBConnector()
+        rows_affected, result = conn.execute("SELECT * "
+                                             "FROM Disk "
+                                             "WHERE id = {0}").format(diskID)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    if rows_affected == 0:
+        return BadQuery()
+    result.next()
+    return Disk(result.getInt("id"), result.getString("company"), result.getInt("speed"),
+                result.getInt("free_space"), result.getInt("cost"))
+
+
+def deleteDisk(diskID: int) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    rows_affected = 0
+    try:
+        conn = Connector.DBConnector()
+        q = sql.SQL("DELETE FROM Disk WHERE id = {ID}").format(ID=sql.Literal(diskID))
+        rows_affected, _ = conn.execute(q)
+        if rows_affected == 0:
+            ret_val = ReturnValue.NOT_EXISTS
+        conn.commit()
+    except Exception as e:
+        ret_val = ReturnValue.ERROR
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
+
+
+def addRAM(ram: RAM) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        id_param = ram.getRamID()
+        company_param = ram.getCompany()
+        size_param = ram.getSize()
+        q = sql.SQL("INSERT INTO Ram(id, company, size) VALUES({id}, {company}, {size})").format(
+            id=sql.Literal(id_param), company=sql.Literal(company_param), size=sql.Literal(size_param))
+        conn.execute(q)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
+
+
+def getRAMProfile(ramID: int) -> RAM:
+    conn = None
+    rows_affected = 0
+    result = ResultSet()
+
+    try:
+        conn = Connector.DBConnector()
+        rows_affected, result = conn.execute("SELECT * "
+                                             "FROM Ram "
+                                             "WHERE id = {0}").format(ramID)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    if rows_affected == 0:
+        return BadRam()
+    result.next()
+    return RAM(result.getInt("id"), result.getInt("size"), result.getString("company"))
+
+
+def deleteRAM(ramID: int) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    rows_affected = 0
+    try:
+        conn = Connector.DBConnector()
+        id_param = query.getQueryID()
+        size_param = query.getSize()
+        q = sql.SQL("DELETE FROM Ram WHERE id = {ID}").format(ID=sql.Literal(ramID))
+        rows_affected, _ = conn.execute(q)
+        if rows_affected == 0:
+            ret_val = ReturnValue.NOT_EXISTS
+        conn.commit()
+    except Exception as e:
+        ret_val = ReturnValue.ERROR
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
+
+
+def addDiskAndQuery(disk: Disk, query: Query) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        query_id_param = query.getQueryID()
+        purpose_param = query.getPurpose()
+        size_param = query.getSize()
+        q = sql.SQL("INSERT INTO Query(id, purpose, disk_size_needed) VALUES({id}, {purpose}, {disk_size})").format(
+            id=sql.Literal(id_param), purpose=sql.Literal(purpose_param), disk_size=sql.Literal(size_param))
+
+        disk_id_param = query.getDiskID()
+        company_param = query.getCompany()
+        speed_param = query.getSpeed()
+        free_space_param = query.getFreeSpace()
+        cost_param = query.getCost()
+        q = sql.SQL(
+            "BEGIN;"
+            "INSERT INTO Disk(disk_id, company, speed, free_space, cost) VALUES({disk_id}, {company}, {speed}, {free_space}, {cost});"
+            "INSERT INTO Query(query_id, purpose, disk_size_needed) VALUES({query_id}, {purpose}, {disk_size});"
+            "COMMIT;").format(
+            disk_id=sql.Literal(disk_id_param), company=sql.Literal(company_param), speed=sql.Literal(speed_param),
+            free_space=sql.Literal(free_space_param), cost=sql.Literal(cost_param),
+            query_id=sql.Literal(query_id_param), purpose=sql.Literal(purpose_param), disk_size=sql.Literal(size_param))
+        conn.execute(q)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
     return ReturnValue.OK
 
 
+def addQueryToDisk(query: Query, diskID: int) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        query_id_param = query.getQueryID()
+        query_purpose_param = query.getPurpose()
+        query_size_param = query.getSize()
+        q = sql.SQL(
+            "BEGIN;"
+            "INSERT INTO QueryOnDisk(query_id, disk_id) VALUES({query_id}, {disk_id});"
+            "UPDATE Disk SET free_space=free_space-({size}) WHERE id=({disk_id});"
+            "COMMIT;").format(query_id=sql.Literal(query_id_param), disk_id=sql.Literal(diskID),size=sql.Literal(query_size_param))
+        conn.execute(q)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
+    return ReturnValue.OK
+
+
+def removeQueryFromDisk(query: Query, diskID: int) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        query_id_param = query.getQueryID()
+        query_purpose_param = query.getPurpose()
+        query_size_param = query.getSize()
+        q = sql.SQL(
+            "BEGIN;"
+            "DELETE FROM QueryOnDisk WHERE query_id=({query_id}) AND disk_id= ({disk_id});"
+            "UPDATE Disk SET free_space=free_space+({size}) WHERE id=({disk_id});"
+            "COMMIT;").format(query_id=sql.Literal(query_id_param), disk_id=sql.Literal(diskID),size=sql.Literal(query_size_param))
+        conn.execute(q)
+
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
+
+def addRAMToDisk(ramID: int, diskID: int) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        q = sql.SQL(
+            "BEGIN;"
+            "INSERT INTO RamOnDisk(ram_id, disk_id) VALUES({ram_id}, {disk_id});"
+            "COMMIT;").format(ram_id=sql.Literal(ramID), disk_id=sql.Literal(diskID))
+        conn.execute(q)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
+
+def removeRAMFromDisk(ramID: int, diskID: int) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        q = sql.SQL(
+            "BEGIN;"
+            "DELETE FROM RamOnDisk WHERE ram_id={ram_id} AND disk_id={disk_id};"
+            "COMMIT;").format(ram_id=sql.Literal(ramID), disk_id=sql.Literal(diskID))
+        conn.execute(q)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
+
+def averageSizeQueriesOnDisk(diskID: int) -> float:
+    conn = None
+    rows_effected, result = 0, ResultSet()
+    rows_effected2, result2 = 0, ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        q = sql.SQL("SELECT AVG(disk_size_needed) FROM ViewDiskOnQuery WHERE disk_id={disk_id}").format(disk_id=sql.Literal(diskID))
+        rows_effected, result=conn.execute(q,printSchema=False)
+        return result[0]['avg']
+
+    except ZeroDivisionError:
+        conn.rollback()
+        conn.close()
+        return 0
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return -1
+    conn.close()
+    return 0
 
 def deleteUser(ID: int, persistent: bool = True) -> int:
     conn = None
@@ -276,5 +595,10 @@ if __name__ == '__main__':
     print("10.5. testing add query")
     query = Query(1, "test", 10)
     addQuery(query)
+    disky = Disk(1,"Siemens",1,11,11)
+    a=addDisk(disky)
+    b=addQueryToDisk(query,1)
+    h=averageSizeQueriesOnDisk(1)
+    c=removeQueryFromDisk(query,1)
     print("11. Dropping all tables - empty database")
     dropTable()

@@ -374,16 +374,58 @@ def addDiskAndQuery(disk: Disk, query: Query) -> ReturnValue:
     return ret_val
     return ReturnValue.OK
 
-
 def addQueryToDisk(query: Query, diskID: int) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        query_id_param = query.getQueryID()
+        query_purpose_param = query.getPurpose()
+        query_size_param = query.getSize()
+        q = sql.SQL(
+            "BEGIN;"
+            "INSERT INTO QueryOnDisk(query_id, disk_id) VALUES({query_id}, {disk_id});"
+            "UPDATE Disk SET free_space=free_space-({size}) WHERE id=({disk_id});"
+            "COMMIT;").format(query_id=sql.Literal(query_id_param), disk_id=sql.Literal(diskID),size=sql.Literal(query_size_param))
+        conn.execute(q)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
     return ReturnValue.OK
 
 
 def removeQueryFromDisk(query: Query, diskID: int) -> ReturnValue:
+    conn = None
+    ret_val = ReturnValue.OK
+    try:
+        conn = Connector.DBConnector()
+        query_id_param = query.getQueryID()
+        query_purpose_param = query.getPurpose()
+        query_size_param = query.getSize()
+        q = sql.SQL(
+            "BEGIN;"
+            "DELETE FROM QueryOnDisk WHERE query_id=({query_id}) AND disk_id= ({disk_id});"
+            "UPDATE Disk SET free_space=free_space+({size}) WHERE id=({disk_id});"
+            "COMMIT;").format(query_id=sql.Literal(query_id_param), disk_id=sql.Literal(diskID),size=sql.Literal(query_size_param))
+        conn.execute(q)
+
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    return ret_val
     return ReturnValue.OK
 
-
 def addRAMToDisk(ramID: int, diskID: int) -> ReturnValue:
+
     return ReturnValue.OK
 
 
