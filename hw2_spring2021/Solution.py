@@ -79,15 +79,15 @@ def createTable() -> None:
                      ");" +
 
                      "CREATE VIEW ViewDiskAndQuery AS\n" +
-                     "SELECT q.id AS query_id, q.disk_size_needed," +
-                     "d.id AS disk_id, d.free_space" +
+                     "SELECT q.id AS query_id, q.disk_size_needed AS disk_size_needed," +
+                     "d.id AS disk_id, d.free_space AS free_space" +
                      " FROM Query q, Disk d\n;" +
 
                      "CREATE VIEW ViewDiskOnQuery AS\n" +
-                     "SELECT qod.query_id , qod.disk_id," +
-                     "d.free_space, q.disk_size_needed" +
+                     "SELECT qod.query_id AS query_id, qod.disk_id AS disk_id," +
+                     "d.free_space AS free_space, q.disk_size_needed AS disk_size_needed" +
                      " FROM Query q, Disk d, QueryOnDisk as qod" +
-                     "\tWHERE d.id = qod.disk_id AND q.id = qod.disk_id;\n" +
+                     "\tWHERE d.id = qod.disk_id AND q.id = qod.query_id;\n" +
                      "COMMIT;")
 
     except DatabaseException.ConnectionInvalid as e:

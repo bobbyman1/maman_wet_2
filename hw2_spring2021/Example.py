@@ -113,7 +113,7 @@ def createTable() -> None:
                      "SELECT qod.query_id AS query_id, qod.disk_id AS disk_id," +
                      "d.free_space AS free_space, q.disk_size_needed AS disk_size_needed" +
                      " FROM Query q, Disk d, QueryOnDisk as qod" +
-                     "\tWHERE d.id = qod.disk_id AND q.id = qod.disk_id;\n" +
+                     "\tWHERE d.id = qod.disk_id AND q.id = qod.query_id;\n" +
                     "COMMIT;")
 
         conn.commit()
@@ -323,8 +323,8 @@ def addRAM(ram: RAM) -> ReturnValue:
         id_param = ram.getRamID()
         company_param = ram.getCompany()
         size_param = ram.getSize()
-        q = sql.SQL("INSERT INTO Ram(id, company, size) VALUES({id}, {company}, {size})").format(
-            id=sql.Literal(id_param), company=sql.Literal(company_param), size=sql.Literal(size_param))
+        q = sql.SQL("INSERT INTO Ram(id, size, company) VALUES({id}, {size}, {company})").format(
+            id=sql.Literal(id_param),size=sql.Literal(size_param) ,company=sql.Literal(company_param) )
         conn.execute(q)
         conn.commit()
     except Exception as e:
@@ -472,9 +472,7 @@ def addRAMToDisk(ramID: int, diskID: int) -> ReturnValue:
     try:
         conn = Connector.DBConnector()
         q = sql.SQL(
-            "BEGIN;"
-            "INSERT INTO RamOnDisk(ram_id, disk_id) VALUES({ram_id}, {disk_id});"
-            "COMMIT;").format(ram_id=sql.Literal(ramID), disk_id=sql.Literal(diskID))
+                "INSERT INTO RamOnDisk(ram_id, disk_id) VALUES({ram_id}, {disk_id})").format(ram_id=sql.Literal(ramID), disk_id=sql.Literal(diskID))
         conn.execute(q)
         conn.commit()
     except Exception as e:
@@ -513,6 +511,51 @@ def averageSizeQueriesOnDisk(diskID: int) -> float:
         q = sql.SQL("SELECT AVG(disk_size_needed) FROM ViewDiskOnQuery WHERE disk_id={disk_id}").format(disk_id=sql.Literal(diskID))
         rows_effected, result=conn.execute(q,printSchema=False)
         return result[0]['avg']
+
+    except ZeroDivisionError:
+        conn.rollback()
+        conn.close()
+        return 0
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return -1
+    conn.close()
+    return 0
+
+
+
+
+def diskTotalRAM(diskID: int) -> int:
+    conn = None
+    rows_effected, result = 0, ResultSet()
+    rows_effected2, result2 = 0, ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        q = sql.SQL("SELECT SUM(r.size) FROM Ram AS r, RamOnDisk AS rod WHERE r.id=rod.ram_id AND rod.disk_id={disk_id}").format(disk_id=sql.Literal(diskID))
+        rows_effected, result=conn.execute(q,printSchema=False)
+        return result[0]['sum']
+
+    except ZeroDivisionError:
+        conn.rollback()
+        conn.close()
+        return 0
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return -1
+    conn.close()
+    return 0
+
+def getCostForPurpose(purpose: str) -> int:
+    conn = None
+    rows_effected, result = 0, ResultSet()
+    rows_effected2, result2 = 0, ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        q = sql.SQL("SELECT SUM(d.cost_per_byte*vdoq.disk_size_needed) FROM ViewDiskOnQuery AS vdoq, Disk AS d, Query AS q WHERE q.purpose={purpose} AND q.id=vdoq.query_id AND d.id=vdoq.disk_id").format(purpose=sql.Literal(purpose))
+        rows_effected, result=conn.execute(q,printSchema=False)
+        return result[0]['sum']
 
     except ZeroDivisionError:
         conn.rollback()
@@ -594,11 +637,25 @@ if __name__ == '__main__':
             print(str(col) + "=" + str(current_row[col]))
     print("10.5. testing add query")
     query = Query(1, "test", 10)
+    query2 = Query(2, "test", 11)
+    query3 = Query(3, "test", 12)
     addQuery(query)
-    disky = Disk(1,"Siemens",1,11,11)
+    addQuery(query2)
+    addQuery(query3)
+    disky = Disk(1,"Siemens",1,33,11)
     a=addDisk(disky)
-    b=addQueryToDisk(query,1)
-    h=averageSizeQueriesOnDisk(1)
-    c=removeQueryFromDisk(query,1)
+    b=addQueryToDisk(query, 1)
+    b1=addQueryToDisk(query2, 1)
+    b2=addQueryToDisk(query3, 1)
+    c=averageSizeQueriesOnDisk(1)
+    #d=removeQueryFromDisk(query,1)
+    ram1=RAM(1,"yay",1)
+    ram2=RAM(2,"yay",1)
+    addRAM(ram1)
+    addRAM(ram2)
+    e=addRAMToDisk(1,1)
+    f=addRAMToDisk(2,1)
+    g=diskTotalRAM(1)
+    h=getCostForPurpose("test")
     print("11. Dropping all tables - empty database")
     dropTable()
