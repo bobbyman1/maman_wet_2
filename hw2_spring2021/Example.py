@@ -234,7 +234,7 @@ def deleteQuery(query: Query) -> ReturnValue:
         id_param = query.getQueryID()
         size_param = query.getSize()
         q = sql.SQL("BEGIN;"
-                    "UPDATE Disk SET free_space = free_space - {size}"
+                    "UPDATE Disk SET free_space = free_space + {size}"
                     "FROM QueryOnDisk As qod WHERE Disk.id = qod.disk_id AND qod.query_id = {se_ID};"
                     "DELETE FROM Query WHERE id = {ID};"
                     "COMMIT;").format(size=sql.Literal(size_param), se_ID=sql.Literal(id_param), ID=sql.Literal(id_param))
@@ -290,7 +290,7 @@ def getDiskProfile(diskID: int) -> Disk:
         # will happen any way after code try termination or exception handling
         conn.close()
     if rows_affected == 0:
-        return BadQuery()
+        return BadDisk()
     result.next()
     return Disk(result.getInt("id"), result.getString("company"), result.getInt("speed"),
                 result.getInt("free_space"), result.getInt("cost"))
@@ -325,7 +325,7 @@ def addRAM(ram: RAM) -> ReturnValue:
         company_param = ram.getCompany()
         size_param = ram.getSize()
         q = sql.SQL("INSERT INTO Ram(id, size, company) VALUES({id}, {size}, {company})").format(
-            id=sql.Literal(id_param),size=sql.Literal(size_param) ,company=sql.Literal(company_param) )
+            id=sql.Literal(id_param), size=sql.Literal(size_param) , company=sql.Literal(company_param) )
         conn.execute(q)
         conn.commit()
     except Exception as e:
@@ -390,24 +390,21 @@ def addDiskAndQuery(disk: Disk, query: Query) -> ReturnValue:
         query_id_param = query.getQueryID()
         purpose_param = query.getPurpose()
         size_param = query.getSize()
-        q = sql.SQL("INSERT INTO Query(id, purpose, disk_size_needed) VALUES({id}, {purpose}, {disk_size})").format(
-            id=sql.Literal(id_param), purpose=sql.Literal(purpose_param), disk_size=sql.Literal(size_param))
-
-        disk_id_param = query.getDiskID()
-        company_param = query.getCompany()
-        speed_param = query.getSpeed()
-        free_space_param = query.getFreeSpace()
-        cost_param = query.getCost()
+        disk_id_param = disk.getDiskID()
+        company_param = disk.getCompany()
+        speed_param = disk.getSpeed()
+        free_space_param = disk.getFreeSpace()
+        cost_param = disk.getCost()
         q = sql.SQL(
             "BEGIN;"
-            "INSERT INTO Disk(disk_id, company, speed, free_space, cost) VALUES({disk_id}, {company}, {speed}, {free_space}, {cost});"
-            "INSERT INTO Query(query_id, purpose, disk_size_needed) VALUES({query_id}, {purpose}, {disk_size});"
+            "INSERT INTO Disk(id, maunfacturing_company, speed, free_space, cost_per_byte) VALUES({disk_id}, {company},"
+            "{speed}, {free_space}, {cost});"
+            "INSERT INTO Query(id, purpose, disk_size_needed) VALUES({query_id}, {purpose}, {disk_size});"
             "COMMIT;").format(
             disk_id=sql.Literal(disk_id_param), company=sql.Literal(company_param), speed=sql.Literal(speed_param),
             free_space=sql.Literal(free_space_param), cost=sql.Literal(cost_param),
             query_id=sql.Literal(query_id_param), purpose=sql.Literal(purpose_param), disk_size=sql.Literal(size_param))
         conn.execute(q)
-        conn.commit()
     except Exception as e:
         ret_val = errorHandler(e)
         conn.rollback()
@@ -415,7 +412,6 @@ def addDiskAndQuery(disk: Disk, query: Query) -> ReturnValue:
         # will happen any way after code try termination or exception handling
         conn.close()
     return ret_val
-    return ReturnValue.OK
 
 
 def addQueryToDisk(query: Query, diskID: int) -> ReturnValue:
@@ -440,7 +436,6 @@ def addQueryToDisk(query: Query, diskID: int) -> ReturnValue:
         # will happen any way after code try termination or exception handling
         conn.close()
     return ret_val
-    return ReturnValue.OK
 
 
 def removeQueryFromDisk(query: Query, diskID: int) -> ReturnValue:
@@ -458,7 +453,6 @@ def removeQueryFromDisk(query: Query, diskID: int) -> ReturnValue:
             "COMMIT;").format(query_id=sql.Literal(query_id_param), disk_id=sql.Literal(diskID),size=sql.Literal(query_size_param))
         conn.execute(q)
 
-        conn.commit()
     except Exception as e:
         ret_val = errorHandler(e)
         conn.rollback()
@@ -494,7 +488,6 @@ def removeRAMFromDisk(ramID: int, diskID: int) -> ReturnValue:
             "DELETE FROM RamOnDisk WHERE ram_id={ram_id} AND disk_id={disk_id};"
             "COMMIT;").format(ram_id=sql.Literal(ramID), disk_id=sql.Literal(diskID))
         conn.execute(q)
-        conn.commit()
     except Exception as e:
         ret_val = errorHandler(e)
         conn.rollback()
@@ -511,6 +504,8 @@ def averageSizeQueriesOnDisk(diskID: int) -> float:
         conn = Connector.DBConnector()
         q = sql.SQL("SELECT AVG(disk_size_needed) FROM ViewDiskOnQuery WHERE disk_id={disk_id}").format(disk_id=sql.Literal(diskID))
         rows_effected, result=conn.execute(q,printSchema=False)
+        conn.commit()
+        conn.close()
         return result[0]['avg']
 
     except ZeroDivisionError:
@@ -535,6 +530,8 @@ def diskTotalRAM(diskID: int) -> int:
         conn = Connector.DBConnector()
         q = sql.SQL("SELECT SUM(r.size) FROM Ram AS r, RamOnDisk AS rod WHERE r.id=rod.ram_id AND rod.disk_id={disk_id}").format(disk_id=sql.Literal(diskID))
         rows_effected, result=conn.execute(q,printSchema=False)
+        conn.commit()
+        conn.close()
         return result[0]['sum']
 
     except ZeroDivisionError:
@@ -582,14 +579,14 @@ def getQueriesCanBeAddedToDisk(diskID: int) -> List[int]:
             current_row = result[index]  # get the row
             for col in current_row:  # iterate over the columns
                 retList.append(str(current_row[col]))
+        conn.commit()
+        conn.close()
         return retList
 
     except ZeroDivisionError:
         conn.rollback()
-        conn.close()
     except Exception as e:
         conn.rollback()
-        conn.close()
     conn.close()
     return []
 
@@ -606,14 +603,14 @@ def getQueriesCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
             current_row = result[index]  # get the row
             for col in current_row:  # iterate over the columns
                 retList.append(str(current_row[col]))
+        conn.commit()
+        conn.close()
         return retList
 
     except ZeroDivisionError:
         conn.rollback()
-        conn.close()
     except Exception as e:
         conn.rollback()
-        conn.close()
     conn.close()
     return []
 
