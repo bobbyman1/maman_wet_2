@@ -596,20 +596,16 @@ def getConflictingDisks() -> List[int]:
     try:
         conn = Connector.DBConnector()
         q = sql.SQL(
-            "SELECT DISTINCT disk_id FROM QueryOnDisk"
-            "GROUP BY query_id"
-            "HAVING COUNT(query_id) > 1"
-            "ORDER BY disk_id ASC")
+            "SELECT DISTINCT q1.disk_id FROM QueryOnDisk AS q1, QueryOnDisk AS q2 "
+            "WHERE q1.query_id = q2.query_id AND q1.disk_id <> q2.disk_id")
         rows_effected, result = conn.execute(q, printSchema=False)
         # print users
         for index in range(result.size()):  # for each user
-            current_row = result[index]  # get the row
-            for col in current_row:  # iterate over the columns
-                retList.append(str(current_row[col]))
+            current_id = result[index]["q1.disk_id"]  # get the row
+            retList.append(current_id)
         conn.commit()
         conn.close()
         return retList
-
     except ZeroDivisionError:
         conn.rollback()
     except Exception as e:
