@@ -107,7 +107,7 @@ def createTable() -> None:
         
                     "CREATE VIEW ViewDiskAndQuery AS\n" +
                      "SELECT q.id AS query_id, q.disk_size_needed AS disk_size_needed," +
-                     "d.id AS disk_id, d.free_space AS free_space" +
+                     "d.id AS disk_id, d.free_space AS free_space, d.speed AS speed" +
                      " FROM Query q, Disk d\n;" +
 
                     "CREATE VIEW ViewDiskOnQuery AS\n" +

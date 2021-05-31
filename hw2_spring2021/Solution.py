@@ -80,7 +80,7 @@ def createTable() -> None:
 
                      "CREATE VIEW ViewDiskAndQuery AS\n" +
                      "SELECT q.id AS query_id, q.disk_size_needed AS disk_size_needed," +
-                     "d.id AS disk_id, d.free_space AS free_space" +
+                     "d.id AS disk_id, d.free_space AS free_space, d.speed AS speed" +
                      " FROM Query q, Disk d\n;" +
 
                      "CREATE VIEW ViewDiskOnQuery AS\n" +
@@ -90,16 +90,6 @@ def createTable() -> None:
                      "\tWHERE d.id = qod.disk_id AND q.id = qod.query_id;\n" +
                      "COMMIT;")
 
-    except DatabaseException.ConnectionInvalid as e:
-        conn.rollbak()
-    except DatabaseException.NOT_NULL_VIOLATION as e:
-        conn.rollbak()
-    except DatabaseException.CHECK_VIOLATION as e:
-        conn.rollbak()
-    except DatabaseException.UNIQUE_VIOLATION as e:
-        conn.rollbak()
-    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
-        conn.rollbak()
     except Exception as e:
         conn.rollbak()
     finally:
@@ -108,7 +98,22 @@ def createTable() -> None:
 
 
 def clearTables():
-    pass
+    conn = None
+    try:
+        conn = Connector.DBConnector()
+        conn.execute("BEGIN;"
+                     "DELETE FROM Query CASCADE ;"
+                     "DELETE FROM Disk CASCADE ;"
+                     "DELETE FROM Ram CASCADE ;"
+                     "DELETE FROM QueryOnDisk CASCADE ;"
+                     "DELETE FROM RamOnDisk CASCADE ;"
+                     "COMMIT;")
+
+    except Exception as e:
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
 
 
 def dropTables():
@@ -117,21 +122,7 @@ def dropTables():
         conn = Connector.DBConnector()
         conn.execute("BEGIN; DROP TABLE IF EXISTS Query, Disk, Ram, QueryOnDisk, RamOnDisk CASCADE;"
                      " DROP VIEW IF EXISTS ViewDiskAndQuery, ViewDiskOnQuery CASCADE; COMMIT;")
-    except DatabaseException.ConnectionInvalid as e:
-        # do stuff
-        conn.rollback()
-    except DatabaseException.NOT_NULL_VIOLATION as e:
-        # do stuff
-        conn.rollback()
-    except DatabaseException.CHECK_VIOLATION as e:
-        # do stuff
-        conn.rollback()
-    except DatabaseException.UNIQUE_VIOLATION as e:
-        # do stuff
-        conn.rollback()
-    except DatabaseException.FOREIGN_KEY_VIOLATION as e:
-        # do stuff
-        conn.rollback()
+
     except Exception as e:
         conn.rollback()
     finally:
@@ -622,8 +613,6 @@ def getConflictingDisks() -> List[int]:
         conn.commit()
         conn.close()
         return retList
-    except ZeroDivisionError:
-        conn.rollback()
     except Exception as e:
         conn.rollback()
     conn.close()
@@ -631,6 +620,31 @@ def getConflictingDisks() -> List[int]:
 
 
 def mostAvailableDisks() -> List[int]:
+    conn = None
+    retList = []
+    rows_effected, result = 0, ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        num_elements = 5
+        q = sql.SQL(
+            "SELECT disk_id FROM ViewDiskAndQuery"
+            "WHERE free_space >= disk_size_needed"
+            "GROUP BY disk_id, speed"
+            "ORDER BY COUNT(query_id) DESC, speed DESC, disk_id ASC")
+        rows_effected, result = conn.execute(q, printSchema=False)
+        # print users
+        if rows_effected<num_elements:
+            num_elements = rows_effected
+        for index in range(num_elements):  # for each user
+            disk_id = result[index]["disk_id"]  # get the row
+            retList.append(disk_id)
+        conn.commit()
+        conn.close()
+        return retList
+    except Exception as e:
+        conn.rollback()
+    conn.close()
+    return []
     return []
 
 
