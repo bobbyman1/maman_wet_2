@@ -6,6 +6,7 @@ from Business.Query import Query
 from Business.RAM import RAM
 from Business.Disk import Disk
 from psycopg2 import sql
+from typing import List
 
 def errorHandler(e):
     ret_val = ReturnValue.ERROR
@@ -568,6 +569,55 @@ def getCostForPurpose(purpose: str) -> int:
     conn.close()
     return 0
 
+def getQueriesCanBeAddedToDisk(diskID: int) -> List[int]:
+    conn = None
+    retList=[]
+    rows_effected, result = 0, ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        q = sql.SQL("SELECT q.id FROM Query AS q, Disk AS d WHERE d.id={disk_id}  AND d.free_space>=q.disk_size_needed ORDER BY q.id ASC LIMIT 5").format(disk_id=sql.Literal(diskID))
+        rows_effected, result=conn.execute(q,printSchema=False)
+        # print users
+        for index in range(result.size()):  # for each user
+            current_row = result[index]  # get the row
+            for col in current_row:  # iterate over the columns
+                retList.append(str(current_row[col]))
+        return retList
+
+    except ZeroDivisionError:
+        conn.rollback()
+        conn.close()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+    conn.close()
+    return []
+
+def getQueriesCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
+    conn = None
+    retList=[]
+    rows_effected, result = 0, ResultSet()
+    try:
+        conn = Connector.DBConnector()
+        q = sql.SQL("SELECT q.id FROM Query AS q, Disk AS d WHERE d.id=1  AND d.free_space>=q.disk_size_needed AND q.disk_size_needed<=(SELECT SUM(r.size) FROM Ram AS r, RamOnDisk AS rod WHERE r.id=rod.ram_id AND rod.disk_id=1) ORDER BY q.id ASC LIMIT 5").format(disk_id=sql.Literal(diskID))
+        rows_effected, result=conn.execute(q,printSchema=False)
+        # print users
+        for index in range(result.size()):  # for each user
+            current_row = result[index]  # get the row
+            for col in current_row:  # iterate over the columns
+                retList.append(str(current_row[col]))
+        return retList
+
+    except ZeroDivisionError:
+        conn.rollback()
+        conn.close()
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+    conn.close()
+    return []
+
+
 def deleteUser(ID: int, persistent: bool = True) -> int:
     conn = None
     rows_effected = 0
@@ -639,10 +689,16 @@ if __name__ == '__main__':
     query = Query(1, "test", 10)
     query2 = Query(2, "test", 11)
     query3 = Query(3, "test", 12)
+    query4 = Query(4, "test", -1)
+    query5 = Query(5, "test", 34)
+    query6 = Query(6, "test", 21)
     addQuery(query)
     addQuery(query2)
     addQuery(query3)
-    disky = Disk(1,"Siemens",1,33,11)
+    addQuery(query4)
+    addQuery(query5)
+    addQuery(query6)
+    disky = Disk(1,"Siemens",1,66,11)
     a=addDisk(disky)
     b=addQueryToDisk(query, 1)
     b1=addQueryToDisk(query2, 1)
@@ -657,5 +713,6 @@ if __name__ == '__main__':
     f=addRAMToDisk(2,1)
     g=diskTotalRAM(1)
     h=getCostForPurpose("test")
+    i=getQueriesCanBeAddedToDisk(1)
     print("11. Dropping all tables - empty database")
     dropTable()
