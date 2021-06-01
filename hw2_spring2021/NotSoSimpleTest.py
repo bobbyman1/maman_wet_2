@@ -8,6 +8,7 @@ from Business.Disk import Disk
 
 
 class Test(AbstractTest):
+    '''
     def test_Disk_add_get_and_remove(self) -> None:
         self.assertEqual(ReturnValue.OK, Solution.addDisk(Disk(1, "DELL", 10, 10, 10)), "Should work")
         self.assertEqual(ReturnValue.OK, Solution.addDisk(Disk(2, "DELL", 10, 10, 10)), "Should work")
@@ -679,7 +680,7 @@ class Test(AbstractTest):
                          "Disk 1 deleted, therefore Disk 3 is no longer conflicting")
         Solution.dropTables()
         self.assertEqual([],Solution.getConflictingDisks(),"Should error and return empty list")
-
+    '''
     def test_mostAvailableDisks(self):
         self.assertListEqual([],Solution.mostAvailableDisks(),"No disks")
         self.assertEqual(ReturnValue.OK,Solution.addDisk(Disk(1,"HP",1,1,1)),"Should work")
@@ -730,7 +731,7 @@ class Test(AbstractTest):
         self.assertListEqual([1,2,3,4,5], Solution.mostAvailableDisks(), "Max 5 disks")
         Solution.dropTables()
         self.assertListEqual([], Solution.mostAvailableDisks(), "Should error and return empty list")
-
+    '''
     def test_getCloseQueries(self):
         self.assertEqual(ReturnValue.OK,Solution.addQuery(Query(1,"stuff",0)),"Should work")
         self.assertListEqual([], Solution.getCloseQueries(1), "Query can't be close to itself")
@@ -801,6 +802,7 @@ class Test(AbstractTest):
         self.assertEqual(ReturnValue.OK, Solution.addQuery(Query(15, "stuff", 0)), "Should work")
         self.assertListEqual([1, 2, 7, 8, 9, 10, 11, 12, 15, 23], Solution.getCloseQueries(3),
                              "Max 10, should not include 3 itself")
+    '''
 
 
 # *** DO NOT RUN EACH TEST MANUALLY ***

@@ -582,8 +582,13 @@ def isCompanyExclusive(diskID: int) -> bool:
     rows_effected, result = 0, ResultSet()
     try:
         conn = Connector.DBConnector()
-        q = sql.SQL("SELECT count(*) WHERE 0=(SELECT COUNT(r.id) AS numOfID FROM RamOnDisk AS rod, Disk AS d, Ram AS r WHERE rod.disk_id={disk_id} AND r.id=rod.ram_id AND d.id={disk_id} AND d.manufacturing_company<>r.company)").format(disk_id=sql.Literal(diskID))
+        q = sql.SQL("SELECT count(*) "
+                    "FROM Disk as d "
+                    "WHERE d.id={disk_id} "
+                    "AND 0=(SELECT COUNT(r.id) AS numOfID FROM RamOnDisk AS rod, Disk AS d, Ram AS r WHERE rod.disk_id={disk_id} AND r.id=rod.ram_id AND d.id={disk_id} AND d.manufacturing_company<>r.company)").format(disk_id=sql.Literal(diskID))
         rows_effected, result=conn.execute(q,printSchema=False)
+        if result[0]['count'] == None:
+            return False
         return result[0]['count']
 
     except Exception as e:
@@ -624,18 +629,21 @@ def mostAvailableDisks() -> List[int]:
     rows_effected, result = 0, ResultSet()
     try:
         conn = Connector.DBConnector()
-        num_elements = 5
-        q = sql.SQL(
-            "SELECT disk_id FROM ViewDiskAndQuery"
-            "WHERE free_space >= disk_size_needed"
-            "GROUP BY disk_id, speed"
-            "ORDER BY COUNT(query_id) DESC, speed DESC, disk_id ASC")
+        q = sql.SQL("SELECT queryBig.id1 "
+                    "FROM (SELECT COALESCE (q1.disk_id, q2.id)AS id1 , COALESCE (q1.counter, q2.counter) AS counter1, COALESCE (q1.speed, q2.speed) AS speed1 "
+                    "            FROM (SELECT disk_id, COUNT(query_id) AS counter, speed FROM  "
+                    "            ViewDiskAndQuery  "
+                    "            GROUP BY disk_id, speed  "
+                    "            ORDER BY COUNT(query_id) DESC, speed DESC, disk_id ASC LIMIT 5) AS q1  "
+                    "            FULL OUTER JOIN (SELECT id , 0 AS counter, speed FROM Disk WHERE (SELECT COUNT(*) FROM ViewDiskAndQuery) = 0  "
+                    "            ORDER BY speed DESC, id ASC LIMIT 5) AS q2  "
+                    "            ON q1.disk_id = q2.id "
+                    "            ORDER BY counter1 DESC, speed1 DESC, id1 ASC LIMIT 5) AS queryBig "
+                    "ORDER BY queryBig.counter1 DESC, queryBig.speed1 DESC, queryBig.id1 ASC LIMIT 5 ")
         rows_effected, result = conn.execute(q, printSchema=False)
         # print users
-        if rows_effected<num_elements:
-            num_elements = rows_effected
-        for index in range(num_elements):  # for each user
-            disk_id = result[index]["disk_id"]  # get the row
+        for index in range(result.size()):  # for each user
+            disk_id = result[index]["id1"]  # get the row
             retList.append(disk_id)
         conn.commit()
         conn.close()
