@@ -365,8 +365,8 @@ def addQueryToDisk(query: Query, diskID: int) -> ReturnValue:
         query_size_param = query.getSize()
         q = sql.SQL(
             "BEGIN;"
-            "UPDATE Disk SET free_space=free_space-({size}) FROM Query AS q WHERE id = {disk_id} AND {query_id} IN (q.id);"
             "INSERT INTO QueryOnDisk(query_id, disk_id) VALUES({query_id}, {disk_id});"
+            "UPDATE Disk SET free_space=free_space-({size}) FROM Query AS q WHERE Disk.id = {disk_id} AND {query_id} IN (q.id);"
             "COMMIT;").format(query_id=sql.Literal(query_id_param), disk_id=sql.Literal(diskID),
                               size=sql.Literal(query_size_param))
         rows_effected, result =conn.execute(q)
@@ -431,9 +431,10 @@ def removeRAMFromDisk(ramID: int, diskID: int) -> ReturnValue:
     try:
         conn = Connector.DBConnector()
         q = sql.SQL(
-            "DELETE FROM RamOnDisk WHERE ram_id={ram_id} AND disk_id={disk_id};"
-            ).format(ram_id=sql.Literal(ramID), disk_id=sql.Literal(diskID))
+            "DELETE FROM RamOnDisk WHERE ram_id={ramid} AND disk_id={diskid};"
+            ).format(ramid=sql.Literal(ramID), diskid=sql.Literal(diskID))
         rows_effected, result = conn.execute(q)
+        conn.commit()
         if rows_effected == 0:
             ret_val = ReturnValue.NOT_EXISTS
     except Exception as e:
@@ -455,7 +456,7 @@ def averageSizeQueriesOnDisk(diskID: int) -> float:
         rows_effected, result = conn.execute(q, printSchema=False)
         conn.commit()
         conn.close()
-        if rows_effected == 0:
+        if result[0]['avg'] == None:
             return 0
 
         return result[0]['avg']
@@ -483,7 +484,7 @@ def diskTotalRAM(diskID: int) -> int:
         rows_effected, result = conn.execute(q, printSchema=False)
         conn.commit()
         conn.close()
-        if rows_effected==0:
+        if result[0]['sum']==None:
             return 0
 
         return result[0]['sum']
@@ -603,7 +604,7 @@ def getConflictingDisks() -> List[int]:
         rows_effected, result = conn.execute(q, printSchema=False)
         # print users
         for index in range(result.size()):  # for each user
-            current_id = result[index]["q1.disk_id"]  # get the row
+            current_id = result[index]["disk_id"]  # get the row
             retList.append(current_id)
         conn.commit()
         conn.close()
@@ -649,17 +650,17 @@ def getCloseQueries(queryID: int) -> List[int]:
     try:
         conn = Connector.DBConnector()
         q = sql.SQL(
-            "SELECT DISTINCT(q.id) FROM Query AS q,QueryOnDisk AS qod, (SELECT C.query_id AS id, COUNT(*) "
-            "FROM (SELECT qod.query_id AS query_id ,qod.disk_id AS disk_id FROM QueryOnDisk AS qod"
+            "SELECT DISTINCT(q_main.id) FROM Query AS q_main, QueryOnDisk AS qod_main LEFT OUTER JOIN (SELECT C.query_id AS id, COUNT(*) "
+            "FROM (SELECT qod.query_id AS query_id, qod.disk_id AS disk_id FROM QueryOnDisk AS qod "
             "WHERE qod.query_id<>{ID} AND qod.disk_id IN "
-            "(SELECT qod.disk_id FROM QueryOnDisk AS qod WHERE qod.query_id={ID})) AS C "
-            "GROUP BY C.query_id"
-            "HAVING COUNT(*)  >= (SELECT COUNT(qod.disk_id)  FROM QueryOnDisk AS qod WHERE qod.query_id={ID} )/2.0 "
-            "ORDER BY C.query_id ASC LIMIT 10) AS q2"
-            "WHERE q.id<>1 AND(q.id=q2.id OR 0 = (SELECT COUNT(qod.disk_id) "
-            "FROM QueryOnDisk AS qod"
-            "WHERE qod.query_id={ID}))"
-            "ORDER BY q.id ASC LIMIT 10").format(ID = sql.Literal(queryID))
+            "(SELECT qod_1.disk_id FROM QueryOnDisk AS qod_1 WHERE qod_1.query_id={ID})) AS C "
+            "GROUP BY C.query_id "
+            "HAVING COUNT(*)  >= ((SELECT COUNT(qod_2.disk_id)  FROM QueryOnDisk AS qod_2 WHERE qod_2.query_id={ID} )/2.0) "
+            "ORDER BY C.query_id ASC LIMIT 10) AS q2 "
+            "WHERE q_main.id<>{ID} AND(q_main.id=q2.id OR 0 = (SELECT COUNT(qod_c.disk_id) "
+            "FROM QueryOnDisk AS qod_c "
+            "WHERE qod_c.query_id={ID})) "
+            "ORDER BY q_main.id ASC LIMIT 10").format(ID = sql.Literal(queryID))
         rows_effected, result = conn.execute(q, printSchema=False)
 
         for index in range(result.size()):  # for each user
