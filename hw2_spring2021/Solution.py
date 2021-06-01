@@ -649,22 +649,33 @@ def getCloseQueries(queryID: int) -> List[int]:
     rows_effected, result = 0, ResultSet()
     try:
         conn = Connector.DBConnector()
-        q = sql.SQL(
-            "SELECT DISTINCT(q_main.id) FROM Query AS q_main, QueryOnDisk AS qod_main LEFT OUTER JOIN (SELECT C.query_id AS id, COUNT(*) "
-            "FROM (SELECT qod.query_id AS query_id, qod.disk_id AS disk_id FROM QueryOnDisk AS qod "
-            "WHERE qod.query_id<>{ID} AND qod.disk_id IN "
-            "(SELECT qod_1.disk_id FROM QueryOnDisk AS qod_1 WHERE qod_1.query_id={ID})) AS C "
-            "GROUP BY C.query_id "
-            "HAVING COUNT(*)  >= ((SELECT COUNT(qod_2.disk_id)  FROM QueryOnDisk AS qod_2 WHERE qod_2.query_id={ID} )/2.0) "
-            "ORDER BY C.query_id ASC LIMIT 10) AS q2 "
-            "WHERE q_main.id<>{ID} AND(q_main.id=q2.id OR 0 = (SELECT COUNT(qod_c.disk_id) "
-            "FROM QueryOnDisk AS qod_c "
-            "WHERE qod_c.query_id={ID})) "
-            "ORDER BY q_main.id ASC LIMIT 10").format(ID = sql.Literal(queryID))
+        q = sql.SQL("SELECT DISTINCT COALESCE(q1.id,q2.id) "
+                    "FROM (SELECT DISTINCT(q.id) "
+                    "		FROM Query AS q "
+                    "		LEFT OUTER JOIN QueryOnDisk AS qod "
+                    "		ON q.id=qod.query_id "
+                    "		WHERE q.id<>{ID} AND 0 = (SELECT COUNT(qod.disk_id)  "
+                    "							FROM QueryOnDisk AS qod "
+                    "							WHERE qod.query_id={ID}) "
+                    "		ORDER BY q.id ASC LIMIT 10 "
+                    "	)AS q1 "
+                    "FULL OUTER JOIN (SELECT C.query_id AS id, COUNT(*)  "
+                    "										FROM (SELECT qod.query_id AS query_id ,qod.disk_id AS disk_id "
+                    "												FROM QueryOnDisk AS qod "
+                    "												WHERE qod.query_id<>{ID} AND qod.disk_id IN (SELECT qod.disk_id "
+                    "																							FROM QueryOnDisk AS qod "
+                    "																							WHERE qod.query_id=1)) AS C  "
+                    "										GROUP BY C.query_id "
+                    "										HAVING COUNT(*)  >= (SELECT COUNT(qod.disk_id)  "
+                    "															FROM QueryOnDisk AS qod "
+                    "															WHERE qod.query_id={ID} "
+                    "															)/2.0 "
+                    "										ORDER BY C.query_id ASC LIMIT 10) AS q2 "
+                    "ON  q2.id=q1.id  ").format(ID = sql.Literal(queryID))
         rows_effected, result = conn.execute(q, printSchema=False)
 
         for index in range(result.size()):  # for each user
-            query_id = result[index]["q.id"]  # get the row
+            query_id = result[index]["coalesce"]  # get the row
             retList.append(query_id)
         conn.commit()
         conn.close()

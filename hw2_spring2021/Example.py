@@ -483,13 +483,12 @@ def removeRAMFromDisk(ramID: int, diskID: int) -> ReturnValue:
     ret_val = ReturnValue.OK
     try:
         conn = Connector.DBConnector()
-        q = sql.SQL(
-            "BEGIN;"
-            "DELETE FROM RamOnDisk WHERE ram_id={ram_id} AND disk_id={disk_id};"
-            "COMMIT;").format(ram_id=sql.Literal(ramID), disk_id=sql.Literal(diskID))
-        conn.execute(q)
+        q = sql.SQL("DELETE FROM RamOnDisk AS rod WHERE rod.ram_id={ram_id} AND rod.disk_id={disk_id}").format(ram_id=sql.Literal(ramID), disk_id=sql.Literal(diskID))
+        rows_effected, result = conn.execute(q)
+        if rows_effected == 0:
+            ret_val = ReturnValue.NOT_EXISTS
     except Exception as e:
-        ret_val = errorHandler(e)
+        ret_val = ReturnValue.ERROR
         conn.rollback()
     finally:
         # will happen any way after code try termination or exception handling
@@ -646,6 +645,27 @@ def deleteUser(ID: int, persistent: bool = True) -> int:
     finally:
         conn.close()
         return rows_effected
+def getDiskProfile(diskID: int) -> Disk:
+    conn = None
+    rows_affected = 0
+    result = ResultSet()
+
+    try:
+        conn = Connector.DBConnector()
+        q = sql.SQL("SELECT *  FROM Disk  WHERE id = {disk_id}").format(disk_id=sql.Literal(diskID))
+
+        rows_affected, result = conn.execute(q)
+        conn.commit()
+    except Exception as e:
+        ret_val = errorHandler(e)
+        conn.rollback()
+    finally:
+        # will happen any way after code try termination or exception handling
+        conn.close()
+    if rows_affected == 0:
+        return Disk.badDisk()
+    return Disk(result[0]["id"], result[0]["manufacturing_company"], result[0]["speed"], result[0]["free_space"],
+                result[0]["cost_per_byte"])
 
 
 if __name__ == '__main__':
@@ -706,8 +726,10 @@ if __name__ == '__main__':
     ram2=RAM(2,"yay",1)
     addRAM(ram1)
     addRAM(ram2)
+    z=getDiskProfile(1)
     e=addRAMToDisk(1,1)
     f=addRAMToDisk(2,1)
+    ll=removeRAMFromDisk(2,1)
     g=diskTotalRAM(1)
     h=getCostForPurpose("test")
     i=getQueriesCanBeAddedToDisk(1)
