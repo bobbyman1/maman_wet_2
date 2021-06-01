@@ -629,21 +629,22 @@ def mostAvailableDisks() -> List[int]:
     rows_effected, result = 0, ResultSet()
     try:
         conn = Connector.DBConnector()
-        q = sql.SQL("SELECT queryBig.id1 "
-                    "FROM (SELECT COALESCE (q1.disk_id, q2.id)AS id1 , COALESCE (q1.counter, q2.counter) AS counter1, COALESCE (q1.speed, q2.speed) AS speed1 "
-                    "            FROM (SELECT disk_id, COUNT(query_id) AS counter, speed FROM  "
-                    "            ViewDiskAndQuery  "
-                    "            GROUP BY disk_id, speed  "
-                    "            ORDER BY COUNT(query_id) DESC, speed DESC, disk_id ASC LIMIT 5) AS q1  "
-                    "            FULL OUTER JOIN (SELECT id , 0 AS counter, speed FROM Disk WHERE (SELECT COUNT(*) FROM ViewDiskAndQuery) = 0  "
-                    "            ORDER BY speed DESC, id ASC LIMIT 5) AS q2  "
-                    "            ON q1.disk_id = q2.id "
-                    "            ORDER BY counter1 DESC, speed1 DESC, id1 ASC LIMIT 5) AS queryBig "
-                    "ORDER BY queryBig.counter1 DESC, queryBig.speed1 DESC, queryBig.id1 ASC LIMIT 5 ")
+        q = sql.SQL("SELECT l.ID FROM (SELECT queryBig.id1 AS ID,  COALESCE (queryBig.counter1, 0) AS c, queryBig.speed1 AS s, queryBig.id1  "
+                    "                    FROM (SELECT COALESCE (q1.disk_id, q2.id)AS id1 , COALESCE (q1.counter, q2.counter) AS counter1, COALESCE (q1.speed, q2.speed) AS speed1  "
+                    "                                FROM (SELECT disk_id, COUNT(query_id) AS counter, speed FROM   "
+                    "                                ViewDiskAndQuery   "
+                    "                                Where free_space>=disk_size_needed "
+                    "                                GROUP BY disk_id, speed                                 "
+                    "                                ORDER BY COUNT(query_id) DESC, speed DESC, disk_id ASC LIMIT 5) AS q1   "
+                    "                                FULL OUTER JOIN (SELECT id , 0 AS counter, speed FROM Disk  "
+                    "                                ORDER BY speed DESC, id ASC LIMIT 5) AS q2   "
+                    "                                ON q1.disk_id = q2.id  "
+                    "                                ORDER BY counter1 DESC, speed1 DESC, id1 ASC LIMIT 5) AS queryBig ) AS l  "
+                    "                    ORDER BY l.c DESC, l.s DESC, l.ID ASC LIMIT 5 ")
         rows_effected, result = conn.execute(q, printSchema=False)
         # print users
         for index in range(result.size()):  # for each user
-            disk_id = result[index]["id1"]  # get the row
+            disk_id = result[index]["id"]  # get the row
             retList.append(disk_id)
         conn.commit()
         conn.close()
