@@ -683,7 +683,8 @@ def getCloseQueries(queryID: int) -> List[int]:
                     "															WHERE qod.query_id={ID} "
                     "															)/2.0 "
                     "										ORDER BY C.query_id ASC LIMIT 10) AS q2 "
-                    "ON  q2.id=q1.id  ").format(ID = sql.Literal(queryID))
+                    "ON  q2.id=q1.id  "
+                    "ORDER BY COALESCE(q1.id,q2.id) ASC LIMIT 10").format(ID = sql.Literal(queryID))
         rows_effected, result = conn.execute(q, printSchema=False)
 
         for index in range(result.size()):  # for each user
