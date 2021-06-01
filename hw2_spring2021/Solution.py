@@ -508,7 +508,7 @@ def getCostForPurpose(purpose: str) -> int:
         rows_effected, result = conn.execute(q, printSchema=False)
         conn.commit()
         conn.close()
-        if rows_effected==0:
+        if result[0]['sum']==None:
             return 0
 
         return result[0]['sum']
@@ -527,14 +527,13 @@ def getQueriesCanBeAddedToDisk(diskID: int) -> List[int]:
     try:
         conn = Connector.DBConnector()
         q = sql.SQL(
-            "SELECT q.id FROM Query AS q, Disk AS d WHERE d.id={disk_id}  AND d.free_space>=q.disk_size_needed ORDER BY q.id ASC LIMIT 5").format(
+            "SELECT q.id FROM Query AS q, Disk AS d WHERE d.id={disk_id}  AND d.free_space>=q.disk_size_needed ORDER BY q.id DESC LIMIT 5").format(
             disk_id=sql.Literal(diskID))
         rows_effected, result = conn.execute(q, printSchema=False)
         # print users
         for index in range(result.size()):  # for each user
-            current_row = result[index]  # get the row
-            for col in current_row:  # iterate over the columns
-                retList.append(str(current_row[col]))
+            current_row = result[index]["id"]  # get the row
+            retList.append(current_row)
         conn.commit()
         conn.close()
         return retList
@@ -554,14 +553,17 @@ def getQueriesCanBeAddedToDiskAndRAM(diskID: int) -> List[int]:
     try:
         conn = Connector.DBConnector()
         q = sql.SQL(
-            "SELECT q.id FROM Query AS q, Disk AS d WHERE d.id=1  AND d.free_space>=q.disk_size_needed AND q.disk_size_needed<=(SELECT SUM(r.size) FROM Ram AS r, RamOnDisk AS rod WHERE r.id=rod.ram_id AND rod.disk_id=1) ORDER BY q.id ASC LIMIT 5").format(
+            "SELECT DISTINCT q.id FROM Query AS q, Disk AS d "
+            "WHERE d.id={disk_id}  AND d.free_space>=q.disk_size_needed "
+            "AND (q.disk_size_needed<=(SELECT SUM(r.size) FROM Ram AS r, RamOnDisk AS rod WHERE r.id=rod.ram_id AND rod.disk_id={disk_id}) "
+            "OR q.disk_size_needed = 0) "
+            "ORDER BY q.id ASC LIMIT 5").format(
             disk_id=sql.Literal(diskID))
         rows_effected, result = conn.execute(q, printSchema=False)
         # print users
         for index in range(result.size()):  # for each user
-            current_row = result[index]  # get the row
-            for col in current_row:  # iterate over the columns
-                retList.append(str(current_row[col]))
+            current_row = result[index]["id"]  # get the row
+            retList.append(current_row)
         conn.commit()
         conn.close()
         return retList
@@ -600,7 +602,8 @@ def getConflictingDisks() -> List[int]:
         conn = Connector.DBConnector()
         q = sql.SQL(
             "SELECT DISTINCT q1.disk_id FROM QueryOnDisk AS q1, QueryOnDisk AS q2 "
-            "WHERE q1.query_id = q2.query_id AND q1.disk_id <> q2.disk_id")
+            "WHERE q1.query_id = q2.query_id AND q1.disk_id <> q2.disk_id "
+            "ORDER BY q1.disk_id ASC")
         rows_effected, result = conn.execute(q, printSchema=False)
         # print users
         for index in range(result.size()):  # for each user
