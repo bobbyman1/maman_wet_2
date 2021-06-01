@@ -365,8 +365,8 @@ def addQueryToDisk(query: Query, diskID: int) -> ReturnValue:
         query_size_param = query.getSize()
         q = sql.SQL(
             "BEGIN;"
+            "UPDATE Disk SET free_space=free_space-({size}) FROM Query AS q WHERE id = {disk_id} AND {query_id} IN (q.id);"
             "INSERT INTO QueryOnDisk(query_id, disk_id) VALUES({query_id}, {disk_id});"
-            "UPDATE Disk SET free_space=free_space-({size}) WHERE id=({disk_id});"
             "COMMIT;").format(query_id=sql.Literal(query_id_param), disk_id=sql.Literal(diskID),
                               size=sql.Literal(query_size_param))
         rows_effected, result =conn.execute(q)
