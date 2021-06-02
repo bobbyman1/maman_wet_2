@@ -735,6 +735,7 @@ class Test(AbstractTest):
     def test_getCloseQueries(self):
         self.assertEqual(ReturnValue.OK,Solution.addQuery(Query(1,"stuff",0)),"Should work")
         self.assertListEqual([], Solution.getCloseQueries(1), "Query can't be close to itself")
+        self.assertListEqual([], Solution.getCloseQueries(2), "DOESNT EXIST!!!")
         self.assertEqual(ReturnValue.OK, Solution.addQuery(Query(2, "stuff", 0)), "Should work")
         self.assertListEqual([2],Solution.getCloseQueries(1),"Close in an empty sense")
         self.assertListEqual([1], Solution.getCloseQueries(2), "Close in an empty sense")
